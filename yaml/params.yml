@@ -1,0 +1,34 @@
+env:
+  render: True
+  workspace:
+    pos: [-0.614, 0, 0]
+    quat:
+      w: 0.7071232
+      x: 0.0
+      y: 0.0
+      z: 0.707904
+  camera:
+    pos: [-0.614, -0.5, 0.5 ]
+    target_pos: [-0.614, 0, 0]
+    up_vector: [0.0, 1.0, 0.0]
+    intrinsics:
+      fx: 463
+      fy: 463
+      cx: 320
+      cy: 240
+      width: 640
+      height: 480
+  scene_generation:
+    nr_of_objects:
+      - 5
+      - 8
+    surface_size: [0.25, 0.25]
+grasp_sampling:
+  samples: 1
+  rotations: 1
+  c_shape_hand: # hardcoded values for barrett hand
+    bhand_angles: [1.2, 1, 0.8, 0.65]
+    inner_radius: [0.05, 0.06, 0.07, 0.08]
+    outer_radius: [0.09, 0.1, 0.11, 0.12]
+    phi: [1.04, 0.785, 0.523, 0]
+    gripper_width: 0.07

@@ -1,0 +1,64 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+#*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Vim backup files
+*.swp
+
+/docs
+
+# Python:
+__pycache__
+*.egg-info
+
+*MUJOCO_LOG.TXT*
+
+# Ignore Sphinx built documentation
+*doc/_build/
+
+# IDEs
+*.idea*
+
+/logs
+/models
+
+*.obj
+
+/venv
+clt_core/
+clutter_core/
+
+
+*.xacro
+*.dae
+/assets
+*.urdf
