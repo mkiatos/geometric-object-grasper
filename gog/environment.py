@@ -175,6 +175,89 @@ class Ur5Bhand:
                                               targetOrientation=quat.as_vector("xyzw"))
         self.set_robot_joint_position(joints)
 
+    # def set_task_pose_trajectory(self, pos, quat, duration):
+    #     init_pos, init_quat = self.get_task_pose()
+    #
+    #     trajectories = []
+    #     for i in range(3):
+    #         # trajectories.append(robotics.Trajectory([0, duration], [init_pos[i], pos[i]]))
+    #         trajectories.append(robotics.Trajectory([0, duration], [init_pos[i], init_pos[i]]))
+    #
+    #     init_euler = init_quat.euler_angles()
+    #     final_euler = quat.euler_angles()
+    #     traj_eulers = []
+    #     for i in range(3):
+    #         traj_eulers.append(robotics.Trajectory([0, duration], [init_euler[i], final_euler[i]]))
+    #         # traj_eulers.append(robotics.Trajectory([0, duration], [init_euler[i], final_euler[i]]))
+    #
+    #     t = 0
+    #     dt = 0.001
+    #     while t < duration:
+    #         command = []
+    #         for i in range(3):
+    #             command.append(trajectories[i].pos(t))
+    #
+    #         command_euler = []
+    #         for i in range(3):
+    #             command_euler.append(traj_eulers[i].pos(t))
+    #
+    #         self.set_task_pose(command, Quaternion.from_euler_angles(command_euler[0],
+    #                                                                  command_euler[1],
+    #                                                                  command_euler[2]))
+    #         t += dt
+    #         p.stepSimulation()
+    #         time.sleep(dt)
+
+    def set_task_pose_trajectory(self, pos, quat, duration):
+        init_pos, init_quat = self.get_task_pose()
+
+        trajectories = []
+        for i in range(3):
+            trajectories.append(robotics.Trajectory([0, duration], [init_pos[i], pos[i]]))
+
+        quat_error = init_quat.mul(quat.inverse())
+        if quat_error.w < 0:
+            quat_error = Quaternion(w=-quat_error.w, x=-quat_error.x, y=-quat_error.y, z=-quat_error.z)
+            quat = quat_error.inverse().mul(init_quat)
+
+        init_orientation_error = 2 * quat_error.log()
+
+        traj_orientation_error = []
+        for i in range(3):
+            traj_orientation_error.append(robotics.Trajectory([0, duration], [init_orientation_error[i], 0]))
+
+        t = 0
+        dt = 0.001
+
+        prev_quat = init_quat
+
+        while t < duration:
+            pos_d = np.zeros(3)
+            vel_d = np.zeros(3)
+
+            for i in range(3):
+                pos_d[i] = trajectories[i].pos(t)
+                vel_d[i] = trajectories[i].vel(t)
+
+            orientation_error = np.zeros(3)
+            orientation_error_derivative = np.zeros(3)
+
+            for i in range(3):
+                orientation_error[i] = traj_orientation_error[i].pos(t)
+                orientation_error_derivative[i] = traj_orientation_error[i].vel(t)
+
+            quaternion_error = quat_exp(0.5 * orientation_error)
+            quat_d = quaternion_error.mul(quat)
+            if np.dot(quat_d.vec(), prev_quat.vec()) + quat_d.w * prev_quat.w:
+                quat_d = Quaternion(w=-quat_d.w, x=-quat_d.x, y=-quat_d.y, z=-quat_d.z)
+
+            prev_quat = quat_d
+
+            # angular_velocity_d = np.matmul(log_error_to_angular_velocity_jacobian(quaternion_error,
+            #                                                                       orientation_error).inv(),
+            #                                orientation_error_derivative)
+            # self.set_joints_clik(pos_d, quat_d, vel_d, angular_velocity_d)
+            self.set_task_pose(pos_d, quat_d)
     def set_task_pose_trajectory(self, pos, quat, duration):
         init_pos, init_quat = self.get_task_pose()
 
