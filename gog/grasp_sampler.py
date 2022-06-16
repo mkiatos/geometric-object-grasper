@@ -137,15 +137,16 @@ class GraspSampler:
                         hand_frame = c_shape.push_forward(hand_frame, np.asarray(point_cloud.points))
                         enclosing_ids = c_shape.get_points_in_closing_region(grasp_candidate=hand_frame,
                                                                              pts=np.asarray(point_cloud.points))
-                        grasp_candidates.append({'pose': candidate,
+
+                        frame = np.matmul(hand_frame, self.robot.ref_frame)
+                        grasp_candidates.append({'pose': frame,
                                                  'joint_vals': np.array([0.0, self.bhand_angles[j],
                                                                          self.bhand_angles[j],
                                                                          self.bhand_angles[j]]),
-                                                 'enclosing_pts': point_cloud.select_by_index(enclosing_ids)})
-                        print(candidate)
+                                                 'enclosing_pts': point_cloud.select_by_index(enclosing_ids).transform(np.linalg.inv(hand_frame))})
                         if plot:
                             mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-                            mesh_frame = mesh_frame.transform(hand_frame)
+                            mesh_frame = mesh_frame.transform(frame)
 
                             self.robot.update_links(joint_values=[0.0, self.bhand_angles[j],
                                                                   self.bhand_angles[j],
@@ -153,32 +154,10 @@ class GraspSampler:
                                                     palm_pose=hand_frame)
                             visuals = self.robot.get_visual_map(boxes=True)
                             visuals.append(point_cloud)
-                            # visuals.append(c_shape.sample_surface().transform(hand_frame))
+                            visuals.append(c_shape.sample_surface().transform(hand_frame))
                             visuals.append(mesh_frame)
                             o3d.visualization.draw_geometries(visuals)
 
                         break
 
         return grasp_candidates
-
-
-# def state_representation(depth, camera):
-#     point_cloud = PointCloud.from_depth(depth, camera.get_intrinsics())
-#     point_cloud.estimate_normals()
-#
-#     # Transform point cloud w.r.t. world frame
-#     point_cloud.transform(camera.get_pose())
-#
-#     # Keep only the points above the table
-#     z = np.asarray(point_cloud.points)[:, 2]
-#     ids = np.where(z > 0.01)
-#     above_pts = point_cloud.select_by_index(ids[0].tolist())
-#
-#     # Orient normals to align with camera direction
-#     above_pts.orient_normals_to_align_with_direction(-camera.get_pose()[0:3, 2])
-#
-#     # Visualize point cloud
-#     # frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-#     # o3d.visualization.draw_geometries([above_pts, frame])
-#
-#     return above_pts
