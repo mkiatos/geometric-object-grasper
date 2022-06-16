@@ -213,6 +213,39 @@ class Quaternion:
         self.z = new.z
         return self
 
+    def log(self):
+        if abs(self.w - 1) < 1e-12:
+            return np.zero(3)
+        vec_norm = lin.norm(self.vec())
+        return math.atan2(vec_norm, self.w) * self.vec() / vec_norm
+
+    def mul(self, second):
+        result = Quaternion()
+        result.w = self.w * second.w - np.dot(self.vec(), second.vec())
+        vec = self.w * second.vec() + second.w * self.vec() + np.cross(self.vec(), second.vec())
+        result.x = vec[0]
+        result.y = vec[1]
+        result.z = vec[2]
+        return result
+
+    def inverse(self):
+        result = Quaternion();
+        temp = pow(self.w, 2) + pow(self.x, 2) + pow(self.y, 2) + pow(self.z, 2)
+        result.w = self.w / temp
+        result.x = - self.x / temp
+        result.y = - self.y / temp
+        result.z = - self.z / temp
+        return result
+
+    def log_error(self, desired):
+        diff = self.mul(desired.inverse())
+        if diff.w < 0:
+            diff.x = - diff.x
+            diff.y = - diff.y
+            diff.z = - diff.z
+            diff.w = - diff.w
+        return 2.0 * diff.log()
+
 
 def rot_x(theta):
     rot = np.zeros((3, 3))
@@ -298,3 +331,40 @@ def angle_axis2rot(angle, axis):
     rot[2, 2] = pow(kz, 2) * v + c
 
     return rot
+
+
+def quat_product(quat_1, quat_2):
+    # Computer the product of the two quaternions, term by term
+    final_quat = Quaternion()
+    final_quat.w = quat_1.w * quat_2.w - quat_1.x * quat_2.x - quat_1.y * quat_2.y - quat_1.z * quat_2.z
+    final_quat.x = quat_1.w * quat_2.x + quat_1.x * quat_2.w + quat_1.y * quat_2.z - quat_1.z * quat_2.y
+    final_quat.y = quat_1.w * quat_2.y - quat_1.x * quat_2.z + quat_1.y * quat_2.w + quat_1.z * quat_2.x
+    final_quat.z = quat_1.w * quat_2.z + quat_1.x * quat_2.y - quat_1.y * quat_2.x + quat_1.z * quat_2.w
+
+    return final_quat
+
+
+def quat_exp(vec):
+    quat = Quaternion()
+    vec_norm = np.linalg.norm(vec)
+
+    quat_vec = np.zeros(3)
+    if vec_norm > 1e-8:
+        quat_vec = np.sin(vec_norm) * vec / vec_norm
+
+    quat.w = np.cos(vec_norm)
+    quat.x = quat_vec[0]
+    quat.y = quat_vec[1]
+    quat.z = quat_vec[2]
+    return quat
+
+
+def log_error_to_angular_velocity_jacobian(quaternion_error, log_error):
+    quat_epsilon = quaternion_error.vec()
+    eta = quaternion_error.w
+
+    if 1 - eta * eta > 1e-6:
+        return (- 0.5 * eta * np.matmul(skew_symmetric(log_error), skew_symmetric(quat_epsilon)) +
+                np.matmul(quat_epsilon, np.transpose(quat_epsilon))) / (1 - eta * eta) - 0.5 * skew_symmetric(log_error)
+    else:
+        return np.eye(3)
