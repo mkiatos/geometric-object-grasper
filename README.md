@@ -19,25 +19,35 @@ pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f ht
 ## Quick Demo
 To download the pre-trained models of the shape completion network, run the following commands:
 ```commandline
-
+python test.py
 ```
 
-## Training the Shape Completion Network
+## Shape Completion Network
 <p align="center">
   <img src="images/vae.png" width="700" />
 </p>
 
-To collect data for training the Shape Completion network, run the following command:
+### Data generation 
+To collect data for training the Shape Completion network, first generate the partial point clouds for each model:
 ```commandline
-
+python generate_partial_pcd.py --object_set seen --n_views 5 --log_dir path-to-log-dir
 ```
-Then, to train the network from scratch:
+Then, to generate the grid pairs, run the following command:
 ```commandline
-python train_shape_net.py --dataset_dir path_to_dataset --epochs 100 --batch_size 4 --lr 0.0001
+python collect_data.py --seed 0 --n_samples 100 --pcd_dir path-to-partial-pcd-dir --log_dir path-to-log-dir
+```
+This may take some time. You could run multiple times the collect_data.py in parallel with different seeds and then merge the log_dirs.
+
+### Training
+Finally, for training the network from scratch:
+```commandline
+python train_shape_net.py --dataset_dir path_to_dataset --epochs 100 --batch_size 32 --lr 0.0001
 ```
 
-## Evaluation
-
+### Evaluation
+```commandline
+python eval_shape_net.py --snapshot_file path-to-model --test_data_dir path-to-test-data
+```
 
 ## Citing
 If you find this code useful in your work, please consider citing:
