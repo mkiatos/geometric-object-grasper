@@ -1,5 +1,6 @@
 # geometric-object-grasper
-This repository is an implementation of the paper 'A Geometric Approach for Grasping Unknown Objects with Multi-Fingered Hands' in PyBullet.
+This repository is an implementation of the paper 'A Geometric Approach for Grasping Unknown Objects with Multi-Fingered Hands' in PyBullet. Note that this is a Python implementation and as a result it runs slower than the initial C++ implementation.
+The code is under construction...
 
 ## Installation
 ```shell
