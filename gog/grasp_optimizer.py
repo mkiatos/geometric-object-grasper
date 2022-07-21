@@ -1,9 +1,9 @@
 import numpy as np
 import random
 import open3d as o3d
+from sklearn.neighbors import KDTree
 
 from gog.utils.orientation import Quaternion, angle_axis2rot
-from gog.core.quality import ShapeComplementarityMetric
 
 
 def to_matrix(vec):
@@ -11,6 +11,62 @@ def to_matrix(vec):
     pose[0:3, 0:3] = Quaternion().from_euler_angles(roll=vec[3], pitch=vec[4], yaw=vec[5]).rotation_matrix()
     pose[0:3, 3] = vec[0:3]
     return pose
+
+
+class QualityMetric:
+    def __init__(self):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        pass
+
+
+class ShapeComplementarityMetric(QualityMetric):
+    def __init__(self):
+        self.w = 0.5
+        self.a = 0.5
+
+    def compute_shape_complementarity(self, hand, target, radius=0.03):
+        # Find nearest neighbors for each hand contact
+        kdtree = KDTree(target['points'])
+        dists, nn_ids = kdtree.query(hand['points'])
+
+        shape_metric = 0.0
+        for i in range(hand['points'].shape[0]):
+
+            # Remove duplicates or contacts with nn distance greater than a threshold
+            duplicates = np.argwhere(nn_ids == nn_ids[i])[:, 0]
+            if np.min(dists[duplicates]) != dists[i] or dists[i] > radius:
+                continue
+
+            # Distance error
+            e_p = np.linalg.norm(hand['points'][i] - target['points'][nn_ids[i][0]])
+
+            # Alignment error
+            c_n = -hand['normals'][i] # for TRO is -hand['normals']
+            e_n = c_n.dot(target['normals'][nn_ids[i][0]])
+
+            shape_metric += e_p + self.w * e_n
+
+        return -shape_metric / len(hand['points'])
+
+    @staticmethod
+    def compute_collision_penalty(hand, collisions):
+        if collisions.shape[0] == 0:
+            return 0.0
+
+        # Find nearest neighbors for each collision
+        kdtree = KDTree(hand['points'])
+        dists, nn_ids = kdtree.query(collisions)
+
+        e_col = 0.0
+        for i in range(collisions.shape[0]):
+            e_col += np.linalg.norm(collisions[i] - hand['points'][nn_ids[i][0]])
+        return e_col
+
+    def __call__(self, hand, target, collisions):
+        return self.compute_shape_complementarity(hand, target) + \
+               self.a * self.compute_collision_penalty(hand, collisions)
 
 
 class Optimizer:
@@ -146,7 +202,10 @@ class SplitPSO(Optimizer):
         visuals.append(point_cloud)
         o3d.visualization.draw_geometries(visuals)
 
-    def optimize(self, init_preshape, point_cloud):
+    def optimize(self, init_preshape, point_cloud, plot=False):
+        if plot:
+            self.plot_grasp(point_cloud, preshape={'joints': init_preshape['joint_values'],
+                                                   'palm_pose': init_preshape['pose']})
 
         # Generate swarms
         pose_swarm, joints_swarm = self.create_swarm(init_preshape)
@@ -192,11 +251,16 @@ class SplitPSO(Optimizer):
             joints_swarm.update(w=self.params['w'], c1=self.params['c1'], c2=self.params['c2'])
 
             print('{}. e: {}'.format(i, joints_swarm.global_best_score))
-        self.plot_grasp(point_cloud, preshape={'joints': joints_swarm.global_best_pos,
-                                               'palm_pose': to_matrix(pose_swarm.global_best_pos)})
+            # self.plot_grasp(point_cloud, preshape={'joints': joints_swarm.global_best_pos,
+            #                                        'palm_pose': to_matrix(pose_swarm.global_best_pos)})
+
+        if plot:
+            self.plot_grasp(point_cloud, preshape={'joints': joints_swarm.global_best_pos,
+                                                   'palm_pose': to_matrix(pose_swarm.global_best_pos)})
 
         return {'joints': joints_swarm.global_best_pos,
-                'palm_pose': to_matrix(pose_swarm.global_best_pos)}
+                'pose': to_matrix(pose_swarm.global_best_pos),
+                'score': joints_swarm.global_best_score}
 
 
 class PSO(Optimizer):
@@ -204,3 +268,6 @@ class PSO(Optimizer):
         super(PSO, self).__init__(name, params)
         self.robot = robot
         self.params = params
+
+    def optimize(self, init_preshape, point_cloud):
+        pass
