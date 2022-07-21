@@ -1,4 +1,5 @@
 import os
+import open3d as o3d
 
 
 def test_c_shape():
@@ -33,32 +34,81 @@ def test_c_shape():
         o3d.visualization.draw_geometries(visuals)
 
 
-def test_grasp_sampler():
+def test_optimizer():
+    from gog.robot_hand import BarrettHand
+    from gog.grasp_optimizer import SplitPSO
+    from gog.policy import GraspingPolicy
+    import yaml
+    import open3d as o3d
+
+    with open('../yaml/params.yml', 'r') as stream:
+        params = yaml.safe_load(stream)
+    robot_hand = BarrettHand(urdf_file='../assets/robot_hands/barrett/bh_282.urdf')
+
+    params['grasp_sampling']['rotations'] = 1
+
+    optimizer = SplitPSO(robot_hand, params['power_grasping']['optimizer'])
+
+    policy = GraspingPolicy(robot_hand=robot_hand, params=params)
+
+    point_cloud = o3d.io.read_point_cloud(os.path.join('../logs/pcd_pairs', '47', 'full_pcd.pcd'))
+    o3d.visualization.draw_geometries([point_cloud])
+
+    candidates = policy.get_candidates(point_cloud)
+
+    for candidate in candidates:
+        init_preshape = {'pose': candidate['pose'], 'joint_values': candidate['joint_vals']}
+        optimized_preshape = optimizer.optimize(init_preshape, point_cloud)
+
+
+def test_gog_planner():
     from gog.robot_hand import BarrettHand
     from gog.environment import Environment
     from gog.policy import GraspingPolicy
     import yaml
+    import numpy as np
 
     with open('../yaml/params.yml', 'r') as stream:
         params = yaml.safe_load(stream)
     robot_hand = BarrettHand(urdf_file='../assets/robot_hands/barrett/bh_282.urdf')
 
     env = Environment(assets_root='../assets')
-    env.seed(12)
+    env.seed(1)
     obs = env.reset()
 
     policy = GraspingPolicy(robot_hand=robot_hand, params=params)
-    state = policy.state_representation(obs, plot=True)
-    candidates = policy.get_samples(state)
+    policy.seed(10)
 
-    # for candidate in candidates:
-    #     print(candidate)
-    #     env.step(candidate)
+    while True:
+        state = policy.state_representation(obs, plot=False)
 
-    # grasp_sampler = GraspSampler(robot=robot_hand, params=params['grasp_sampling'])
-    # grasp_candidates = grasp_sampler.sample(obs, plot=True)
+        # Sample candidates
+        candidates = policy.get_candidates(state, plot=False)
+        print('{} grasp candidates found...!'.format(len(candidates)))
+
+        scores = []
+        actions = []
+        for candidate in candidates:
+            rec_point_cloud = policy.reconstruct(candidate, plot=False)
+            rec_point_cloud = rec_point_cloud.transform(candidate['pose'])
+
+            init_preshape = {'pose': candidate['pose'], 'joint_values': candidate['joint_vals']}
+            opt_preshape = policy.optimize(init_preshape, rec_point_cloud)
+
+            action = {'pose': [init_preshape['pose'], opt_preshape['pose']],
+                      'joint_vals': [candidate['joint_vals'], opt_preshape['joints']]}
+            actions.append(action)
+            scores.append(opt_preshape['score'])
+
+        best_id = np.argmin(scores)
+        obs = env.step(actions[best_id])
+
+
+def parse_args():
+    return []
 
 
 if __name__ == "__main__":
     # test_c_shape()
-    test_grasp_sampler()
+    # test_optimizer()
+    test_gog_planner()
