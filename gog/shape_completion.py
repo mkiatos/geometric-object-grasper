@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-
 default_params = {
     'Encoder': {
         'channels': [64, 128, 256, 512],
@@ -115,15 +114,16 @@ class ShapeCompletionNetwork(nn.Module):
 
         x = torch.cat((x, self.pool_output[-1]), dim=1)
 
-        # Occupancy or df
-        pred_occupancy = torch.tanh(self.deconv_layers[-2](x))
+        # signed distance field
+        pred_df = torch.tanh(self.deconv_layers[-2](x))
+        # pred_df = self.deconv_layers[-2](x)
 
         # normals
-        pred_normals = self.deconv_layers[-1](x)
-        # pred_normals = nn.functional.normalize(pred_normals, p=2, dim=1)
+        pred_normals = torch.sigmoid(self.deconv_layers[-1](x))
+        # pred_normals = self.deconv_layers[-1](x)
 
         self.pool_output.clear()
-        return pred_occupancy, pred_normals
+        return pred_df, pred_normals
 
     def forward(self, x):
         mu, logvar = self.encode(x)
@@ -131,13 +131,6 @@ class ShapeCompletionNetwork(nn.Module):
         pred_occupancy, pred_normals = self.decode(z)
         self.z = z
         return pred_occupancy, pred_normals, mu, logvar
-
-    # def forward(self, x):
-    #     # x_pose = torch.tensor(x[0], dtype=torch.float, requires_grad=True).to(default_params['device'])
-    #     # x_grid = torch.tensor(x[1], dtype=torch.float, requires_grad=True).to(default_params['device'])
-    #     z = self.encode(x)
-    #     pred_occupancy, pred_normals = self.decode(z)
-    #     return pred_occupancy, pred_normals
 
 
 class WeightedMSELoss(nn.Module):
@@ -222,9 +215,9 @@ class ShapeCompletionLoss(nn.Module):
         self.l_1 = self.l_df(pred_sdf, target_sdf, weight_df)
         self.l_2 = self.l_normals(pred_normals, target_normals, weight_normals)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        print('kdl_loss:', KLD.detach().cpu().numpy())
-        print('l1:', self.l_1.detach().cpu().numpy(), 'l_2:', self.l_2.detach().cpu().numpy(), \
-              'l:', (self.l_1 + self.l_2 + KLD).detach().cpu().numpy())
+        # print('kdl_loss:', KLD.detach().cpu().numpy())
+        # print('l1:', self.l_1.detach().cpu().numpy(), 'l_2:', self.l_2.detach().cpu().numpy(), \
+        #       'l:', (self.l_1 + self.l_2 + KLD).detach().cpu().numpy())
         return self.l_1 + self.l_2 + KLD
 
     def where(self, input_tensor, value):
