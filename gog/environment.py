@@ -6,7 +6,8 @@ import time
 import cv2
 import matplotlib.pyplot as plt
 
-from gog.utils.orientation import Quaternion, Affine3, angle_axis2rot, rot_y, rot_z, rot_x
+from gog.utils.orientation import Quaternion, Affine3, angle_axis2rot, rot_y, rot_z, rot_x, quat_exp,\
+    log_error_to_angular_velocity_jacobian
 from gog.utils import robotics, pybullet_utils, urdf_editor
 from gog import cameras
 import gog.utils.utils as utils
@@ -97,7 +98,8 @@ class Ur5Bhand:
 
         self.robot_indices = pybullet_utils.get_joint_indices(self.joint_names['robot'], robot_id)
         self.bhand_indices = pybullet_utils.get_joint_indices(self.joint_names['bhand'], robot_id)
-        self.ee_link_name = 'bh_palm_link'
+        # self.ee_link_name = 'bh_palm_link'
+        self.ee_link_name = 'bh_base_link'
         self.distal_links = ['bh_finger_13_link', 'bh_finger_23_link', 'bh_finger_33_link']
 
         # Set robot and hand to position control
@@ -117,9 +119,6 @@ class Ur5Bhand:
                                        'bhand': [0, 0., home_angle, home_angle, home_angle,
                                                  home_angle/3, home_angle/3, home_angle/3]}}
         self.move_home()
-
-    # def __del__(self):
-    #     p.disconnect()
 
     def get_joint_position(self):
         robot_joint_pos = []
@@ -175,40 +174,21 @@ class Ur5Bhand:
                                               targetOrientation=quat.as_vector("xyzw"))
         self.set_robot_joint_position(joints)
 
-    # def set_task_pose_trajectory(self, pos, quat, duration):
-    #     init_pos, init_quat = self.get_task_pose()
-    #
-    #     trajectories = []
-    #     for i in range(3):
-    #         # trajectories.append(robotics.Trajectory([0, duration], [init_pos[i], pos[i]]))
-    #         trajectories.append(robotics.Trajectory([0, duration], [init_pos[i], init_pos[i]]))
-    #
-    #     init_euler = init_quat.euler_angles()
-    #     final_euler = quat.euler_angles()
-    #     traj_eulers = []
-    #     for i in range(3):
-    #         traj_eulers.append(robotics.Trajectory([0, duration], [init_euler[i], final_euler[i]]))
-    #         # traj_eulers.append(robotics.Trajectory([0, duration], [init_euler[i], final_euler[i]]))
-    #
-    #     t = 0
-    #     dt = 0.001
-    #     while t < duration:
-    #         command = []
-    #         for i in range(3):
-    #             command.append(trajectories[i].pos(t))
-    #
-    #         command_euler = []
-    #         for i in range(3):
-    #             command_euler.append(traj_eulers[i].pos(t))
-    #
-    #         self.set_task_pose(command, Quaternion.from_euler_angles(command_euler[0],
-    #                                                                  command_euler[1],
-    #                                                                  command_euler[2]))
-    #         t += dt
-    #         p.stepSimulation()
-    #         time.sleep(dt)
-
     def set_task_pose_trajectory(self, pos, quat, duration):
+        def has_converged(quat, pos, t, duration):
+            robot_pos, robot_quat = self.get_task_pose()
+
+            quaternion_error = robot_quat.mul(quat.inverse())
+            if quaternion_error.w < 0:
+                quaternion_error = - quaternion_error
+
+            orientation_error = 2 * quaternion_error.log()
+
+            if np.linalg.norm(orientation_error) < 0.1 and np.linalg.norm(pos - robot_pos) < 1e-2:
+                return True
+            else:
+                return False
+
         init_pos, init_quat = self.get_task_pose()
 
         trajectories = []
@@ -233,18 +213,13 @@ class Ur5Bhand:
 
         while t < duration:
             pos_d = np.zeros(3)
-            vel_d = np.zeros(3)
 
             for i in range(3):
                 pos_d[i] = trajectories[i].pos(t)
-                vel_d[i] = trajectories[i].vel(t)
 
             orientation_error = np.zeros(3)
-            orientation_error_derivative = np.zeros(3)
-
             for i in range(3):
                 orientation_error[i] = traj_orientation_error[i].pos(t)
-                orientation_error_derivative[i] = traj_orientation_error[i].vel(t)
 
             quaternion_error = quat_exp(0.5 * orientation_error)
             quat_d = quaternion_error.mul(quat)
@@ -253,43 +228,41 @@ class Ur5Bhand:
 
             prev_quat = quat_d
 
-            # angular_velocity_d = np.matmul(log_error_to_angular_velocity_jacobian(quaternion_error,
-            #                                                                       orientation_error).inv(),
-            #                                orientation_error_derivative)
-            # self.set_joints_clik(pos_d, quat_d, vel_d, angular_velocity_d)
             self.set_task_pose(pos_d, quat_d)
-    def set_task_pose_trajectory(self, pos, quat, duration):
-        init_pos, init_quat = self.get_task_pose()
 
-        trajectories = []
-        for i in range(3):
-            # trajectories.append(robotics.Trajectory([0, duration], [init_pos[i], init_pos[i]]))
-            trajectories.append(robotics.Trajectory([0, duration], [init_pos[i], pos[i]]))
-
-        init_euler = init_quat.euler_angles()
-        final_euler = quat.euler_angles()
-        traj_eulers = []
-        for i in range(3):
-            traj_eulers.append(robotics.Trajectory([0, duration], [init_euler[i], final_euler[i]]))
-            # traj_eulers.append(robotics.Trajectory([0, duration], [init_euler[i], final_euler[i]]))
-
-        t = 0
-        dt = 0.001
-        while t < duration:
-            command = []
-            for i in range(3):
-                command.append(trajectories[i].pos(t))
-
-            command_euler = []
-            for i in range(3):
-                command_euler.append(traj_eulers[i].pos(t))
-
-            self.set_task_pose(command, Quaternion.from_euler_angles(command_euler[0],
-                                                                     command_euler[1],
-                                                                     command_euler[2]))
             t += dt
             p.stepSimulation()
             time.sleep(dt)
+
+        if has_converged(quat, pos, t, duration):
+            print("I have converged!!!!!")
+        else:
+            print("No convergence")
+
+    def set_joints_clik(self, pos, quat, vel, angular_vel):
+        robot_pos, robot_quat = self.get_task_pose()
+
+        quaternion_error = robot_quat.mul(quat.inverse())
+        if quaternion_error.w < 0:
+            quaternion_error = - quaternion_error
+
+        orientation_error = 2 * quaternion_error.log()
+        position_error = robot_pos - pos
+
+        error = np.zeros(6)
+        error[0:3] = position_error
+        error[3:] = orientation_error
+
+        rotation_matrix_error = quaternion_error.rotation_matrix()
+
+        velocity = np.zeros(6)
+        velocity[0:3] = vel
+        velocity [3:] = np.matmul(rotation_matrix_error, angular_vel)
+
+        link_index = pybullet_utils.get_link_indices([self.ee_link_name])[0]
+        jacobian = p.calculateJacobian(bodyUniqueId=self.robot_id, linkIndex=link_index)
+
+        # joints_velocity =
 
     def set_joint_trajectory(self, final, duration):
         init = self.get_joint_position()['robot']
@@ -378,317 +351,6 @@ class Ur5Bhand:
                                     targetPosition=self.joint_configs['home']['bhand'][i])
 
 
-class FloatingGripper:
-    """
-    A moving mount and a gripper. The mount has 4 joints:
-            0: prismatic x
-            1: prismatic y
-            2: prismatic z
-            3: revolute z
-    """
-
-    def __init__(self,
-                 robot_hand_urdf,
-                 home_position,
-                 pos_offset,
-                 orn_offset,
-                 simulation):
-        self.home_position = home_position
-
-        # If there is no urdf file, generate the mounted-gripper urdf.
-        self.mount_urdf = os.path.join('assets', MOUNT_URDF_PATH)
-        mounted_urdf_name = "../assets/mounted_" + robot_hand_urdf.split('/')[-1].split('.')[0] + ".urdf"
-        if not os.path.exists(mounted_urdf_name):
-            self.generate_mounted_urdf(robot_hand_urdf, pos_offset, orn_offset)
-
-        # rotation w.r.t. inertia frame
-        self.home_quat = Quaternion.from_rotation_matrix(rot_y(-np.pi / 2))
-
-        # Load robot hand urdf.
-        self.robot_hand_id = pybullet_utils.load_urdf(
-            p,
-            mounted_urdf_name,
-            useFixedBase=True,
-            basePosition=self.home_position,
-            baseOrientation=self.home_quat.as_vector("xyzw")
-        )
-
-        # Mount joints.
-        self.joint_ids = [0, 1, 2, 3]
-
-        self.simulation = simulation
-
-    def generate_mounted_urdf(self,
-                              robot_hand_urdf,
-                              pos_offset,
-                              orn_offset):
-        """
-        Generates the urdf with a moving mount attached to a gripper.
-        """
-
-        # Load gripper.
-        robot_id = pybullet_utils.load_urdf(
-            p,
-            robot_hand_urdf,
-            flags=p.URDF_USE_SELF_COLLISION
-        )
-
-        # Load mount.
-        mount_body_id = pybullet_utils.load_urdf(
-            p,
-            self.mount_urdf,
-            useFixedBase=True
-        )
-
-        # Combine mount and gripper by a joint.
-        ed_mount = urdf_editor.UrdfEditor()
-        ed_mount.initializeFromBulletBody(mount_body_id, 0)
-        ed_gripper = urdf_editor.UrdfEditor()
-        ed_gripper.initializeFromBulletBody(robot_id, 0)
-
-        self.gripper_parent_index = 4  # 4 joints of mount
-        new_joint = ed_mount.joinUrdf(
-            childEditor=ed_gripper,
-            parentLinkIndex=self.gripper_parent_index,
-            jointPivotXYZInParent=pos_offset,
-            jointPivotRPYInParent=p.getEulerFromQuaternion(orn_offset),
-            jointPivotXYZInChild=[0, 0, 0],
-            jointPivotRPYInChild=[0, 0, 0],
-            parentPhysicsClientId=0,
-            childPhysicsClientId=0
-        )
-        new_joint.joint_type = p.JOINT_FIXED
-        new_joint.joint_name = "joint_mount_gripper"
-        urdfname = "assets/mounted_" + robot_hand_urdf.split('/')[-1].split('.')[0] + ".urdf"
-        ed_mount.saveUrdf(urdfname)
-
-        # Remove mount and gripper bodies.
-        p.removeBody(mount_body_id)
-        p.removeBody(robot_id)
-
-    def move(self, target_pos, target_quat, duration=2.0, stop_at_contact=False):
-        # Compute translation.
-        affine_trans = np.eye(4)
-        affine_trans[0:3, 0:3] = self.home_quat.rotation_matrix()
-        affine_trans[0:3, 3] = self.home_position
-        target_pos = np.matmul(np.linalg.inv(affine_trans), np.append(target_pos, 1.0))[0:3]
-
-        # Compute angle.
-        relative_rot = np.matmul(self.home_quat.rotation_matrix().transpose(), target_quat.rotation_matrix())
-        angle = np.arctan2(relative_rot[2, 1], relative_rot[1, 1])
-        target_states = [target_pos[0], target_pos[1], target_pos[2], angle]
-
-        current_pos = []
-        for i in self.joint_ids:
-            current_pos.append(p.getJointState(0, i)[0])
-
-        trajectories = []
-        for i in range(len(self.joint_ids)):
-            trajectories.append(robotics.Trajectory([0, duration], [current_pos[i], target_states[i]]))
-
-        t = 0
-        dt = 0.001
-        is_in_contact = False
-        while t < duration:
-            command = []
-            for i in range(len(self.joint_ids)):
-                command.append(trajectories[i].pos(t))
-
-            p.setJointMotorControlArray(
-                self.robot_hand_id,
-                self.joint_ids,
-                p.POSITION_CONTROL,
-                targetPositions=command,
-                forces=[100 * self.force, 100 * self.force, 100 * self.force, 100 * self.force],
-                positionGains=[100 * self.speed, 100 * self.speed, 100 * self.speed, 100 * self.speed]
-            )
-
-            if stop_at_contact:
-                points = p.getContactPoints(bodyA=self.robot_hand_id)
-                if len(points) > 0:
-                    for pnt in points:
-                        if pnt[9] > 0:
-                            is_in_contact = True
-                            break
-                if is_in_contact:
-                    break
-
-            t += dt
-            self.simulation.step()
-            time.sleep(dt)
-
-        return is_in_contact
-
-    def step_constraints(self):
-        raise NotImplementedError
-
-    def close(self):
-        raise NotImplementedError
-
-    def open(self):
-        raise NotImplementedError
-
-
-class FloatingBHand(FloatingGripper):
-    def __init__(self,
-                 bhand_urdf,
-                 home_position,
-                 simulation):
-
-        # Define the mount link position w.r.t. hand base link.
-        pos_offset = np.array([0.0, 0, -0.065])
-        orn_offset = p.getQuaternionFromEuler([0, 0.0, 0.0])
-
-        super(FloatingBHand, self).__init__(bhand_urdf, home_position, pos_offset, orn_offset,
-                                            simulation=simulation)
-
-        pose = pybullet_utils.get_link_pose('mount_link')
-        pybullet_utils.draw_pose(pose[0], pose[1])
-
-        # Define force and speed (movement of mount).
-        self.force = 10000
-        self.speed = 0.01
-
-        # Bhand joints.
-        self.joint_names = ['bh_j11_joint', 'bh_j21_joint', 'bh_j12_joint', 'bh_j22_joint',
-                            'bh_j32_joint', 'bh_j13_joint', 'bh_j23_joint', 'bh_j33_joint']
-        self.indices = pybullet_utils.get_joint_indices(self.joint_names, self.robot_hand_id)
-
-        # Bhand links (for contact check).
-        self.link_names = ['bh_base_link',
-                           'bh_finger_32_link', 'bh_finger_33_link',
-                           'bh_finger_22_link', 'bh_finger_23_link',
-                           'bh_finger_12_link', 'bh_finger_13_link']
-        self.link_indices = pybullet_utils.get_link_indices(self.link_names, body_unique_id=self.robot_hand_id)
-        self.distals = ['bh_finger_33_link', 'bh_finger_23_link', 'bh_finger_13_link']
-        self.distal_indices = pybullet_utils.get_link_indices(self.distals, body_unique_id=self.robot_hand_id)
-
-        # Move fingers to home position.
-        home_aperture_value = 0.6
-        self.move_fingers([0.0, home_aperture_value, home_aperture_value, home_aperture_value])
-        self.configure(n_links_before=4)
-
-        # pose_13 = pybullet_utils.get_link_pose('bh_finger_1_tip_link')
-        # pose_23 = pybullet_utils.get_link_pose('bh_finger_2_tip_link')
-        # pose_33 = pybullet_utils.get_link_pose('bh_finger_3_tip_link')
-        # p1 = (np.array(pose_13[0]) + np.array(pose_23[0])) / 2.0
-        # p2 = np.array(pose_33[0])
-        # print(p1, p2)
-        # dist = np.linalg.norm(p1 - p2)
-        # print(dist)
-        # input('')
-
-    def set_hand_joint_position(self, joint_position, force):
-        for i in range(len(self.joint_names)):
-            if self.joint_names[i] in ['bh_j32_joint', 'bh_j33_joint']:
-                apply_force = 1.7 * force
-            else:
-                apply_force = force
-            p.setJointMotorControl2(bodyUniqueId=0,
-                                    jointIndex=self.indices[i],
-                                    controlMode=p.POSITION_CONTROL,
-                                    targetPosition=joint_position[i],
-                                    force=apply_force)
-
-    def move_fingers(self, final_joint_values, duration=1, force=2):
-        """
-        Move fingers while keeping the hand to the same pose.
-        """
-
-        # Get current joint positions
-        current_pos = []
-        for i in self.indices:
-            current_pos.append(p.getJointState(0, i)[0])
-
-        hand_pos = []
-        for i in self.joint_ids:
-            hand_pos.append(p.getJointState(0, i)[0])
-
-        final = [final_joint_values[0], final_joint_values[0],
-                 final_joint_values[1], final_joint_values[2],
-                 final_joint_values[3], final_joint_values[1] / 3,
-                 final_joint_values[2] / 3, final_joint_values[3] / 3]
-
-        trajectories = []
-        for i in range(len(self.indices)):
-            trajectories.append(robotics.Trajectory([0, duration], [current_pos[i], final[i]]))
-
-        t = 0
-        dt = 0.001
-        while t < duration:
-            command = []
-            for i in range(len(self.joint_names)):
-                command.append(trajectories[i].pos(t))
-            self.set_hand_joint_position(command, force)
-            # self.step_constraints()
-
-            # Keep the hand the same pose.
-            p.setJointMotorControlArray(
-                self.robot_hand_id,
-                self.joint_ids,
-                p.POSITION_CONTROL,
-                targetPositions=hand_pos,
-                forces=[100 * self.force] * len(self.joint_ids),
-                positionGains=[100 * self.speed] * len(self.joint_ids)
-            )
-
-            t += dt
-            self.simulation.step()
-            time.sleep(dt)
-
-    def step_constraints(self):
-        current_pos = []
-        for i in self.indices:
-            current_pos.append(p.getJointState(0, i)[0])
-
-        p.setJointMotorControlArray(
-            self.robot_hand_id,
-            self.indices,
-            p.POSITION_CONTROL,
-            targetPositions=current_pos,
-            forces=[100 * self.force] * len(self.indices),
-            positionGains=[100 * self.speed] * len(self.indices)
-        )
-
-    def close(self, joint_vals=[0.0, 1.8, 1.8, 1.8], duration=2):
-        self.move_fingers(joint_vals)
-
-    def open(self, joint_vals=[0.0, 0.6, 0.6, 0.6]):
-        self.move_fingers(joint_vals, duration=.1)
-
-    def configure(self, n_links_before):
-        # Set friction coefficients for gripper fingers
-        for i in range(n_links_before, p.getNumJoints(self.robot_hand_id)):
-            p.changeDynamics(self.robot_hand_id, i,
-                             lateralFriction=1.0,
-                             spinningFriction=1.0,
-                             rollingFriction=0.0001,
-                             frictionAnchor=True)
-
-    def is_grasp_stable(self):
-        distal_contacts = 0
-        for link_id in self.distal_indices:
-            contacts = p.getContactPoints(bodyA=self.robot_hand_id, linkIndexA=link_id)
-            distal_contacts += len(contacts)
-
-        body_b = []
-        total_contacts = 0
-        for link_id in self.link_indices:
-            contacts = p.getContactPoints(bodyA=self.robot_hand_id, linkIndexA=link_id)
-            if len(contacts) == 0:
-                continue
-            for pnt in contacts:
-                body_b.append(pnt[2])
-            total_contacts += len(contacts)
-
-        if distal_contacts == total_contacts or len(np.unique(body_b)) != 1:
-            return False, total_contacts
-        elif distal_contacts > total_contacts:
-            assert (distal_contacts > total_contacts)
-        else:
-            return True, total_contacts
-
-
 class SimCamera:
     def __init__(self, config):
         self.pos = np.array(config['pos'])
@@ -763,7 +425,7 @@ class Environment:
         self.assets_root = assets_root
         self.workspace_pos = np.array([-0.614, 0.0, 0.0])
 
-        self.nr_objects = [4, 5]
+        self.nr_objects = [1, 2]
         self.disp = disp
 
         # Setup cameras.
@@ -778,7 +440,7 @@ class Environment:
 
         self.objects = []
         self.obj_files = []
-        objects_path = 'objects/seen'
+        objects_path = 'objects/unseen'
         for obj_file in os.listdir(os.path.join(assets_root, objects_path)):
             if not obj_file.endswith('.obj'):
                 continue
@@ -888,10 +550,12 @@ class Environment:
             free = np.zeros(state.shape, dtype=np.uint8)
             free[state == 0] = 1
             free[0, :], free[:, 0], free[-1, :], free[:, -1] = 0, 0, 0, 0
-            # free[0:10] = 0
-            # free[90:100] = 0
-            # free[:, 0:10] = 0
-            # free[:, 90:100] = 0
+
+            # Do not place object next to table limits
+            free[0:20] = 0
+            free[80:100] = 0
+            free[:, 0:20] = 0
+            free[:, 80:100] = 0
             free = cv2.erode(free, np.ones((erode_size, erode_size), np.uint8))
             # plt.imshow(free)
             # plt.show()
@@ -901,15 +565,13 @@ class Environment:
             pixx = utils.sample_distribution(np.float32(free), self.rng)
             pix = np.array([pixx[1], pixx[0]])
 
-            if i == 0:
-                pix = np.array([50, 50])
-
             # plt.imshow(free)
             # plt.plot(pix[0], pix[1], 'ro')
             # plt.show()
 
             pos = get_xyz(pix, size)
-            theta = self.rng.rand() * 2 * np.pi
+            # theta = self.rng.rand() * 2 * np.pi
+            theta = self.rng.uniform(0, 2 * np.pi)
             quat = Quaternion().from_rotation_matrix(rot_z(theta))
 
             p.removeBody(body_id)
@@ -923,11 +585,6 @@ class Environment:
 
         # Temporarily disable rendering to load scene faster.
         p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
-
-        # Load UR5 robot arm equipped with Barrett hand.
-        # self.bhand = FloatingBHand('../assets/robot_hands/barrett/bh_282.urdf',
-        #                            home_position=np.array([0.7, 0.0, 0.2]),
-        #                            simulation=self.simulation)
 
         robot_id = pybullet_utils.load_urdf(p, UR5_URDF_PATH, flags=p.URDF_USE_SELF_COLLISION)
         self.ur5e = Ur5Bhand(robot_id=robot_id)
@@ -964,27 +621,33 @@ class Environment:
         #                  [1, 0, 0, 0],
         #                  [0, 0, -1, 0],
         #                  [0, 0, 0, 1]])
-        # rot = np.matmul(pose[0:3, 0:3], rot_y(-np.pi/4))
+        # rot = np.matmul(pose[0:3, 0:3], rot_x(-np.pi/4))
         #
         # action_pose = np.eye(4)
         # action_pose[0:3, 0:3] = rot
         # print(action_pose)
-        # # action_pose[0:3, 3] = action['pose'][0:3, 3]
         # action['pose'] = action_pose
 
-        grasp_pos = action['pose'][0:3, 3]
-        approach_direction = action['pose'][0:3, 2]
+        pre_grasp_pos = action['pose'][0][0:3, 3]
+        approach_dir = action['pose'][0][0:3, 2]
 
-        # Move above the pre-grasp position.
-        pre_grasp_pos = grasp_pos
-        grasp_quat = Quaternion.from_rotation_matrix(action['pose'][0:3, 0:3])
-        pre_grasp_pos, grasp_quat = self.workspace2world(pre_grasp_pos, grasp_quat)
+        # # Move above the pre-grasp position.
+        pre_grasp_pos = pre_grasp_pos - 0.05 * approach_dir
+
+        pre_grasp_quat = Quaternion.from_rotation_matrix(action['pose'][0][0:3, 0:3])
+        pre_grasp_pos, grasp_quat = self.workspace2world(pre_grasp_pos, pre_grasp_quat)
+
+        # self.bhand.move_2(pre_grasp_pos, pre_grasp_quat, duration=0.1)
 
         self.ur5e.set_task_pose_trajectory(pos=pre_grasp_pos, quat=grasp_quat, duration=5)
+        self.ur5e.set_hand_joint_trajectory(final=action['joint_vals'][0], duration=2)
 
-        # joints = [0.4, 1, 1, 1]
-        # self.ur5e.set_hand_joint_trajectory(joints, duration=3)
-        input('')
+        #############################################################
+        grasp_pos = action['pose'][1][0:3, 3]
+        grasp_quat = Quaternion.from_rotation_matrix(action['pose'][1][0:3, 0:3])
+        grasp_pos, grasp_quat = self.workspace2world(grasp_pos, grasp_quat)
+        self.ur5e.set_task_pose_trajectory(pos=grasp_pos, quat=grasp_quat, duration=5)
+        self.ur5e.set_hand_joint_trajectory(final=action['joint_vals'][1] + [0, 0.2, 0.2, 0.2], duration=2)
 
         return self.get_obs(), {}
 
