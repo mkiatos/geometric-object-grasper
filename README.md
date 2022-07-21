@@ -17,16 +17,17 @@ In this implementation PytTorch 1.9.0 was used:
 pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/cu111/torch_stable.html
 ```
 
-## Quick Demo
-To download the pre-trained models of the shape completion network, run the following commands:
-```commandline
-python test.py
-```
-
 ## Shape Completion Network
 <p align="center">
   <img src="images/vae.png" width="700" />
 </p>
+
+To download the pretrained model, run the following command:
+```commandline
+cd downloads
+./download-weights.sh
+cd ..
+```
 
 ### Data generation 
 To collect data for training the Shape Completion network, first generate the partial point clouds for each model:
@@ -49,6 +50,14 @@ python train_shape_net.py --dataset_dir path_to_dataset --epochs 100 --batch_siz
 ```commandline
 python eval_shape_net.py --snapshot_file path-to-model --test_data_dir path-to-test-data
 ```
+
+
+## Quick Demo
+To download the pre-trained models of the shape completion network, run the following commands:
+```commandline
+python run.py
+```
+Note hat in order to run the demo, you have to donwload the pretrained shape compeltion model as described above.
 
 ## Citing
 If you find this code useful in your work, please consider citing:
