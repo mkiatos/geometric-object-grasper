@@ -116,11 +116,13 @@ class RobotHand:
                 self.links[link_name] = Link(name=link_name, offset=v.offset, geom_type=v.geom_type,
                                              geom_param=os.path.join(self.assets_dir, v.geom_param))
 
-        # Set the reference frame of the robot hand w.r.t. robot hand base frame
+        # Set the reference frame of the robot hand (aligned with the c-shape ref frame) w.r.t. robot hand base frame
         self.ref_frame = np.eye(4)
 
         self.ignore_links = {}
         self.contacts = {}
+
+        self.load_virtual_contacts('contacts_230')
 
     def forward_kinematics(self, joint_values, palm_pose):
         """
@@ -148,6 +150,7 @@ class RobotHand:
                 continue
             v = self.visuals_map[link_name][0]
 
+            # tf = palm_trans * trans * v.offset
             tf = palm_trans * base_trans * trans * v.offset
             rot = Quaternion(w=tf.rot[0], x=tf.rot[1], y=tf.rot[2], z=tf.rot[3]).rotation_matrix()
 
@@ -159,8 +162,10 @@ class RobotHand:
                                              geom_param=os.path.join(self.assets_dir, v.geom_param))
 
                 if self.contacts:
-                    self.links[link_name].contacts.points = o3d.utility.Vector3dVector(self.contacts[link_name]['points'])
-                    self.links[link_name].contacts.normals = o3d.utility.Vector3dVector(self.contacts[link_name]['normals'])
+                    self.links[link_name].contacts.points = o3d.utility.Vector3dVector(
+                        self.contacts[link_name]['points'])
+                    self.links[link_name].contacts.normals = o3d.utility.Vector3dVector(
+                        self.contacts[link_name]['normals'])
                     self.links[link_name].contacts.paint_uniform_color(color=[1, 0, 0])
 
                 self.links[link_name].transform(pos=tf.pos, rot=rot)
@@ -251,11 +256,12 @@ class BarrettHand(RobotHand):
         super().__init__(urdf_file, name)
 
         # Define reference frame
-        self.ref_frame[0:3, 3] = np.array([0.0, 0.0, 0.1])
+        self.ref_frame[0:3, 3] = np.array([0.0, 0.0, 0.1]) # ToDo: hardcoded?
         self.ref_frame = np.linalg.inv(self.ref_frame)
 
         # Define links that will be ignored
         self.ignore_links = {'bh_finger_31_link', 'bh_finger_21_link', 'bh_finger_11_link'}
+        # self.ignore_links = {}
 
     def update_links(self,
                      joint_values=[0.0, 0.0, 0.0, 0.0],
