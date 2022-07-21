@@ -1,10 +1,7 @@
 import open3d as o3d
 import numpy as np
-import random
 
-import gog.utils.utils
 from gog.utils.orientation import angle_axis2rot
-from gog.utils.o3d_tools import from_depth
 from gog.robot_hand import CShapeHand
 
 
@@ -73,6 +70,11 @@ class GraspSampler:
                                             gripper_width=params['c_shape_hand']['gripper_width'],
                                             phi=params['c_shape_hand']['phi'][i]))
 
+        self.rng = np.random.RandomState()
+
+    def seed(self, seed):
+        self.rng.seed(seed)
+
     def sample(self, point_cloud, plot=False):
         """
         Generate collision-free grasp candidates
@@ -88,25 +90,25 @@ class GraspSampler:
         -------
         A list of the grasp candidates. Each element of the list is a dictionary of {'pose', 'joint_values'}.
         """
-        grasp_candidates = []
 
         # Sample only from the points above the table
         z = np.asarray(point_cloud.points)[:, 2]
-        ids = np.where(z > 0.01)[0]
-        random.shuffle(ids)
+        sample_ids = np.where(z > 0.08)[0] # The 0.08 exists due to the limitation encountered by the robot arm (collision with the table)
+        self.rng.shuffle(sample_ids)
+
+        point_cloud = point_cloud.select_by_index(np.where(z > 0.01)[0])
 
         # Create a kd-tree for nearest neighbor search
         pcd_tree = o3d.geometry.KDTreeFlann(point_cloud)
 
-        rotation_angle = 2 * np.pi / self.rotations
-        if self.rotations > 0:
-            rotation_angles = np.arange(0, np.pi, 2 * np.pi / self.rotations)
-        else:
-            rotation_angles = [0.0]
+        rotation_angle = np.pi / self.rotations
 
+        grasp_candidates = []
         while len(grasp_candidates) < self.num_samples:
+            # print('\r' + str(len(grasp_candidates)), end='', flush=True)
+
             # Sample a point randomly from input point cloud
-            random_id = random.choice(ids)
+            random_id = self.rng.choice(sample_ids)
 
             # Find nearest neighbors
             [_, idx, _] = pcd_tree.search_hybrid_vector_3d(query=point_cloud.points[random_id],
@@ -137,13 +139,15 @@ class GraspSampler:
                         hand_frame = c_shape.push_forward(hand_frame, np.asarray(point_cloud.points))
                         enclosing_ids = c_shape.get_points_in_closing_region(grasp_candidate=hand_frame,
                                                                              pts=np.asarray(point_cloud.points))
+                        enclosing_pts = point_cloud.select_by_index(enclosing_ids).transform(np.linalg.inv(hand_frame))
 
                         frame = np.matmul(hand_frame, self.robot.ref_frame)
                         grasp_candidates.append({'pose': frame,
                                                  'joint_vals': np.array([0.0, self.bhand_angles[j],
                                                                          self.bhand_angles[j],
                                                                          self.bhand_angles[j]]),
-                                                 'enclosing_pts': point_cloud.select_by_index(enclosing_ids).transform(np.linalg.inv(hand_frame))})
+                                                 'enclosing_pts': enclosing_pts})
+
                         if plot:
                             mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
                             mesh_frame = mesh_frame.transform(frame)
@@ -161,3 +165,129 @@ class GraspSampler:
                         break
 
         return grasp_candidates
+
+
+
+# class GraspSampler:
+#     def __init__(self, robot, params):
+#         self.num_samples = params['samples']
+#         self.rotations = params['rotations']
+#         self.robot = robot
+#
+#         self.c_shapes = []
+#         self.bhand_angles = params['c_shape_hand']['bhand_angles']
+#         nr_of_configurations = len(params['c_shape_hand']['inner_radius'])
+#         for i in range(nr_of_configurations):
+#             self.c_shapes.append(CShapeHand(inner_radius=params['c_shape_hand']['inner_radius'][i],
+#                                             outer_radius=params['c_shape_hand']['outer_radius'][i],
+#                                             gripper_width=params['c_shape_hand']['gripper_width'],
+#                                             phi=params['c_shape_hand']['phi'][i]))
+#
+#         self.rng = np.random.RandomState()
+#
+#     def seed(self, seed):
+#         self.rng.seed(seed)
+#
+#     def sample(self, point_cloud, full_point_cloud=None, plot=False):
+#         """
+#         Generate collision-free grasp candidates
+#
+#         Parameters
+#         ----------
+#         point_cloud: open3d.geometry.PointCloud
+#             The input point cloud (transformed w.r.t. the table).
+#         plot: boolean
+#             If True plots the generated grasp candidates.
+#
+#         Returns
+#         -------
+#         A list of the grasp candidates. Each element of the list is a dictionary of {'pose', 'joint_values'}.
+#         """
+#
+#         # Sample only from the points above the table # Todo: Do it outside the sampling operation
+#         z = np.asarray(point_cloud.points)[:, 2]
+#         ids = np.where(z > 0.01)[0]
+#         point_cloud.select_by_index(ids)
+#         self.rng.shuffle(ids)
+#
+#         # ids = np.arange(0, len(np.asarray(point_cloud.points)))
+#         # ids = ids[::4]
+#
+#         # Create a kd-tree for nearest neighbor search
+#         pcd_tree = o3d.geometry.KDTreeFlann(point_cloud)
+#
+#         rotation_angle = np.pi / self.rotations
+#
+#         grasp_candidates = []
+#         while len(grasp_candidates) < self.num_samples:
+#             print('\r' + str(len(grasp_candidates)), end='', flush=True)
+#
+#             # Sample a point randomly from input point cloud
+#             random_id = self.rng.choice(ids)
+#
+#             # Find nearest neighbors
+#             [_, idx, _] = pcd_tree.search_hybrid_vector_3d(query=point_cloud.points[random_id],
+#                                                            radius=0.02, max_nn=1000)
+#             nn_pcd = point_cloud.select_by_index(indices=idx)
+#
+#             # Estimate a local frame
+#             frame_estimator = FrameEstimator(pts=nn_pcd.points, normals=nn_pcd.normals)
+#             local_frame = frame_estimator.estimate(pt=point_cloud.points[random_id])
+#
+#             for i in range(self.rotations):
+#                 # Rotate around the z axis of the local frame
+#                 rot_around_z = angle_axis2rot(angle=i*rotation_angle, axis=local_frame[0:3, 2])
+#                 candidate = local_frame.copy()
+#                 candidate[0:3, 0:3] = np.matmul(rot_around_z, local_frame[0:3, 0:3])
+#
+#                 # Rotate 180 degrees around x axis
+#                 hand_frame = candidate.copy()
+#                 hand_frame[0:3, 1] = -candidate[0:3, 1]
+#                 hand_frame[0:3, 2] = -candidate[0:3, 2]
+#
+#                 # Check for collision with robot hand
+#                 for j in range(len(self.c_shapes)):
+#                     c_shape = self.c_shapes[j]
+#                     if c_shape.is_collision_free(grasp_candidate=hand_frame,
+#                                                  pts=np.asarray(point_cloud.points)):
+#
+#                         hand_frame = c_shape.push_forward(hand_frame, np.asarray(point_cloud.points))
+#                         enclosing_ids = c_shape.get_points_in_closing_region(grasp_candidate=hand_frame,
+#                                                                              pts=np.asarray(point_cloud.points))
+#
+#                         if full_point_cloud is None:
+#                             frame = np.matmul(hand_frame, self.robot.ref_frame)
+#                             grasp_candidates.append({'pose': frame,
+#                                                      'joint_vals': np.array([0.0, self.bhand_angles[j],
+#                                                                              self.bhand_angles[j],
+#                                                                              self.bhand_angles[j]]),
+#                                                      'enclosing_pts': point_cloud.select_by_index(enclosing_ids).transform(np.linalg.inv(hand_frame))})
+#
+#                         else:
+#                             enclosing_full_ids = c_shape.get_points_in_closing_region(grasp_candidate=hand_frame,
+#                                                                                       pts=np.asarray(full_point_cloud.points))
+#                             frame = np.matmul(hand_frame, self.robot.ref_frame)
+#                             grasp_candidates.append({'pose': frame,
+#                                                      'joint_vals': np.array([0.0, self.bhand_angles[j],
+#                                                                              self.bhand_angles[j],
+#                                                                              self.bhand_angles[j]]),
+#                                                      'enclosing_pts': [point_cloud.select_by_index(enclosing_ids).transform(np.linalg.inv(hand_frame)),
+#                                                                        full_point_cloud.select_by_index(enclosing_full_ids).transform(np.linalg.inv(hand_frame))]})
+#
+#                         if plot:
+#                             mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+#                             mesh_frame = mesh_frame.transform(frame)
+#
+#                             self.robot.update_links(joint_values=[0.0, self.bhand_angles[j],
+#                                                                   self.bhand_angles[j],
+#                                                                   self.bhand_angles[j]],
+#                                                     palm_pose=hand_frame)
+#                             visuals = self.robot.get_visual_map(boxes=True)
+#                             visuals.append(point_cloud)
+#                             visuals.append(c_shape.sample_surface().transform(hand_frame))
+#                             visuals.append(mesh_frame)
+#                             o3d.visualization.draw_geometries(visuals)
+#
+#                         break
+#
+#         return grasp_candidates
