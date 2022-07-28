@@ -261,23 +261,29 @@ class SplitPSO(Optimizer):
             # self.plot_grasp(point_cloud, preshape={'joints': joints_swarm.global_best_pos,
             #                                        'pose': to_matrix(pose_swarm.global_best_pos)})
 
+        max_bounds = [1.8, 1.8, 1.8]
         opt_pose = to_matrix(pose_swarm.global_best_pos)
         finger_joints = joints_swarm.global_best_pos
-        for i in range(3):
+        for j in range(3):
             while True:
-                finger_joints[i+1] += 0.1
+                finger_joints[j+1] += 0.1
+                if finger_joints[j+1] > max_bounds[j]:
+                    break
                 self.robot.update_links(joint_values=finger_joints, palm_pose=opt_pose)
                 if len(self.robot.get_collision_pts(point_cloud)) > 0:
-                    finger_joints[i + 1] -= 0.1
+                    finger_joints[j + 1] -= 0.1
                     break
 
+        self.robot.update_links(joint_values=finger_joints, palm_pose=opt_pose)
+        score = self.quality_metric(hand=self.robot.get_contacts(), target=object_pts,
+                                    collisions=self.robot.get_collision_pts(point_cloud))
         if plot:
             self.plot_grasp(point_cloud, preshape={'joints': joints_swarm.global_best_pos,
                                                    'pose': to_matrix(pose_swarm.global_best_pos)})
 
         return {'finger_joints': joints_swarm.global_best_pos,
                 'pose': to_matrix(pose_swarm.global_best_pos),
-                'score': joints_swarm.global_best_score}
+                'score': score}
 
 
 class PSO(Optimizer):
