@@ -3,9 +3,8 @@ import numpy as np
 import torch
 
 from gog import cameras
-from gog.utils.utils import get_pointcloud
 from gog.utils import pybullet_utils
-from gog.utils.o3d_tools import VoxelGrid, get_reconstructed_surface
+from gog.utils.o3d_tools import PointCloud, VoxelGrid, get_reconstructed_surface
 from gog.grasp_sampler import GraspSampler
 from gog.shape_completion import ShapeCompletionNetwork
 from gog.grasp_optimizer import SplitPSO
@@ -32,7 +31,7 @@ class GraspingPolicy:
 
     def state_representation(self, obs, plot=True):
         intrinsics = np.array(self.config['intrinsics']).reshape(3, 3)
-        point_cloud = get_pointcloud(obs['depth'][0], obs['seg'][0], intrinsics)
+        point_cloud = PointCloud.from_depth(obs['depth'][0], intrinsics)
         point_cloud.estimate_normals()
 
         # Transform point cloud w.r.t. world frame
@@ -53,8 +52,6 @@ class GraspingPolicy:
         # Orient normals to align with camera direction
         point_cloud.orient_normals_to_align_with_direction(-transform[0:3, 2])
 
-        # Downsample point cloud (no need for dense point cloud)
-        # point_cloud = point_cloud.voxel_down_sample(voxel_size=0.005)
         point_cloud.paint_uniform_color([0.0, 0.1, 0.9])
 
         if plot:

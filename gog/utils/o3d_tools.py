@@ -62,7 +62,7 @@ class PointCloud(o3d.geometry.PointCloud):
         super(PointCloud, self).__init__()
 
     @staticmethod
-    def from_depth(depth, camera_intrinsics):
+    def from_depth(depth, intrinsics):
         """
         Creates a point cloud from a depth image given the camera
         intrinsics parameters.
@@ -71,7 +71,7 @@ class PointCloud(o3d.geometry.PointCloud):
         ----------
         depth: np.array
             The input image.
-        camera_intrinsics: PinholeCameraIntrinsics object
+        intrinsics: PinholeCameraIntrinsics object
             Intrinsics parameters of the camera.
 
         Returns
@@ -84,8 +84,8 @@ class PointCloud(o3d.geometry.PointCloud):
         c, r = np.meshgrid(np.arange(width), np.arange(height), sparse=True)
         valid = (depth > 0)
         z = np.where(valid, depth, 0)
-        x = np.where(valid, z * (c - camera_intrinsics.cx) / camera_intrinsics.fx, 0)
-        y = np.where(valid, z * (r - camera_intrinsics.cy) / camera_intrinsics.fy, 0)
+        x = np.where(valid, z * (c - intrinsics[0, 2]) / intrinsics[0, 0], 0)
+        y = np.where(valid, z * (r - intrinsics[1, 2]) / intrinsics[1, 1], 0)
         pcd = np.dstack((x, y, z))
         return o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pcd.reshape(-1, 3)))
 
