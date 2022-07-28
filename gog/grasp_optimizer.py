@@ -130,6 +130,11 @@ class SplitPSO(Optimizer):
         if self.params['metric'] == 'shape_complementarity':
             self.quality_metric = ShapeComplementarityMetric()
 
+        self.rng = np.random.RandomState()
+
+    def seed(self, seed):
+        self.rng.seed(seed)
+
     def generate_random_angles(self, init_joints, joints_range=None):
         joints_range = np.array([[0.0, 10.0 * np.pi / 180],
                                  [0.0, 50.0 * np.pi / 180],
