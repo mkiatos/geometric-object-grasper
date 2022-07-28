@@ -17,10 +17,10 @@ pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f ht
 ```
 
 ## Quick Demo
+<img src="images/gog.gif" height=300px align="right" />
 This demo runs our pre-trained model with a floating Barrett Hand in simulation on unseen object set and 
-the goal is to grasp every object in the scene.
+the goal is to grasp every object in the scene. First download the pre-trained model of the shape completion network:
 
-First download the pre-trained model of the shape completion network:
 ```commandline
 cd downloads
 ./download-weights.sh
