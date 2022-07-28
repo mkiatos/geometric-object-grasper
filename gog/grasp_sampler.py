@@ -93,8 +93,9 @@ class GraspSampler:
 
         # Sample only from the points above the table
         z = np.asarray(point_cloud.points)[:, 2]
-        sample_ids = np.where(z > 0.08)[0] # The 0.08 exists due to the limitation encountered by the robot arm (collision with the table)
-        self.rng.shuffle(sample_ids)
+        sample_ids = np.where(z > 0.01)[0]
+        above_pts = point_cloud.select_by_index(sample_ids)
+        # sample_ids = np.arange(1, len(np.asarray(point_cloud.points)))
 
         point_cloud = point_cloud.select_by_index(np.where(z > 0.01)[0])
 
