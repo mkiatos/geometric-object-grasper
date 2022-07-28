@@ -20,13 +20,12 @@ env:
       height: 480
   scene_generation:
     nr_of_objects:
+      - 4
       - 5
-      - 8
-    surface_size: [0.25, 0.25]
 
 grasp_sampling:
-  samples: 1
-  rotations: 1
+  samples: 20
+  rotations: 4
   minimum_pts_in_closing_region: 1000
   c_shape_hand: # hardcoded values for barrett hand
     bhand_angles: [1.2, 1, 0.8, 0.65]
@@ -35,14 +34,12 @@ grasp_sampling:
     phi: [1.04, 0.785, 0.523, 0]
     gripper_width: 0.07
 
-
 vae:
-  model_weights: '../logs/vae_1/model_95.pt'
-
+  model_weights: '../logs/vae/model.pt'
 
 power_grasping:
   optimizer:
-    particles: 30
+    particles: 5
     max_iterations: 10
     w: 0.72
     c1: 1.49
