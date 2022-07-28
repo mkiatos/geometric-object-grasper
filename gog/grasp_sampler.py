@@ -97,8 +97,6 @@ class GraspSampler:
         above_pts = point_cloud.select_by_index(sample_ids)
         # sample_ids = np.arange(1, len(np.asarray(point_cloud.points)))
 
-        point_cloud = point_cloud.select_by_index(np.where(z > 0.01)[0])
-
         # Create a kd-tree for nearest neighbor search
         pcd_tree = o3d.geometry.KDTreeFlann(point_cloud)
 
@@ -139,14 +137,15 @@ class GraspSampler:
 
                         hand_frame = c_shape.push_forward(hand_frame, np.asarray(point_cloud.points))
                         enclosing_ids = c_shape.get_points_in_closing_region(grasp_candidate=hand_frame,
-                                                                             pts=np.asarray(point_cloud.points))
-                        enclosing_pts = point_cloud.select_by_index(enclosing_ids).transform(np.linalg.inv(hand_frame))
+                                                                             pts=np.asarray(above_pts.points))
+
+                        enclosing_pts = above_pts.select_by_index(enclosing_ids).transform(np.linalg.inv(hand_frame))
 
                         frame = np.matmul(hand_frame, self.robot.ref_frame)
                         grasp_candidates.append({'pose': frame,
-                                                 'joint_vals': np.array([0.0, self.bhand_angles[j],
-                                                                         self.bhand_angles[j],
-                                                                         self.bhand_angles[j]]),
+                                                 'finger_joints': np.array([0.0, self.bhand_angles[j],
+                                                                            self.bhand_angles[j],
+                                                                            self.bhand_angles[j]]),
                                                  'enclosing_pts': enclosing_pts})
 
                         if plot:
