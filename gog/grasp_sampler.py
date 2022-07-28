@@ -57,6 +57,7 @@ class FrameEstimator:
 
 class GraspSampler:
     def __init__(self, robot, params):
+        self.params = params
         self.num_samples = params['samples']
         self.rotations = params['rotations']
         self.robot = robot
@@ -98,6 +99,9 @@ class GraspSampler:
         sample_ids = np.where(z > 0.01)[0]
         above_pts = point_cloud.select_by_index(sample_ids)
 
+        # Downsample point cloud (no need for dense point cloud)
+        col_point_cloud = point_cloud.voxel_down_sample(voxel_size=0.005)
+
         # Create a kd-tree for nearest neighbor search
         pcd_tree = o3d.geometry.KDTreeFlann(point_cloud)
 
@@ -133,11 +137,13 @@ class GraspSampler:
                 for j in range(len(self.c_shapes)):
                     c_shape = self.c_shapes[j]
                     if c_shape.is_collision_free(grasp_candidate=hand_frame,
-                                                 pts=np.asarray(point_cloud.points)):
+                                                 pts=np.asarray(col_point_cloud.points)):
 
                         hand_frame = c_shape.push_forward(hand_frame, np.asarray(point_cloud.points))
                         enclosing_ids = c_shape.get_points_in_closing_region(grasp_candidate=hand_frame,
                                                                              pts=np.asarray(above_pts.points))
+                        if len(enclosing_ids) < self.params['minimum_pts_in_closing_region']:
+                            continue
 
                         enclosing_pts = above_pts.select_by_index(enclosing_ids).transform(np.linalg.inv(hand_frame))
 
