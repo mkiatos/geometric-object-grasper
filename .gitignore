@@ -58,7 +58,7 @@ clt_core/
 clutter_core/
 
 
-*.xacro
-*.dae
-/assets
-*.urdf
+#*.xacro
+#*.dae
+#*.urdf
+/assets/tmp
