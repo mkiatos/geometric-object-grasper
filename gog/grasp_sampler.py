@@ -77,7 +77,8 @@ class GraspSampler:
 
     def sample(self, point_cloud, plot=False):
         """
-        Generate collision-free grasp candidates
+        Generate collision-free grasp candidates by approximating the
+        robot hand with a c-shaped cylinder.
 
         Parameters
         ----------
@@ -88,14 +89,14 @@ class GraspSampler:
 
         Returns
         -------
-        A list of the grasp candidates. Each element of the list is a dictionary of {'pose', 'joint_values'}.
+        A list of the grasp candidates. Each element of the list is a
+        dictionary of {'pose', 'finger_joints', 'enclosing_pts}.
         """
 
         # Sample only from the points above the table
         z = np.asarray(point_cloud.points)[:, 2]
         sample_ids = np.where(z > 0.01)[0]
         above_pts = point_cloud.select_by_index(sample_ids)
-        # sample_ids = np.arange(1, len(np.asarray(point_cloud.points)))
 
         # Create a kd-tree for nearest neighbor search
         pcd_tree = o3d.geometry.KDTreeFlann(point_cloud)
@@ -104,7 +105,6 @@ class GraspSampler:
 
         grasp_candidates = []
         while len(grasp_candidates) < self.num_samples:
-            # print('\r' + str(len(grasp_candidates)), end='', flush=True)
 
             # Sample a point randomly from input point cloud
             random_id = self.rng.choice(sample_ids)
