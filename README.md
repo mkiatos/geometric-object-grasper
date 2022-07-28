@@ -1,6 +1,5 @@
 # geometric-object-grasper
 This repository is an implementation of the paper 'A Geometric Approach for Grasping Unknown Objects with Multi-Fingered Hands' in PyBullet. Note that this is a Python implementation and as a result it runs slower than the initial C++ implementation.
-The code is under construction...
 
 ## Installation
 ```shell
@@ -17,18 +16,29 @@ In this implementation PytTorch 1.9.0 was used:
 pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 torchaudio==0.9.0 -f https://download.pytorch.org/whl/cu111/torch_stable.html
 ```
 
-## Shape Completion Network
-<p align="center">
-  <img src="images/vae.png" width="700" />
-</p>
+## Quick Demo
+This demo runs our pre-trained model with a floating Barrett Hand in simulation on unseen object set and 
+the goal is to grasp every object in the scene.
 
-To download the pretrained model, run the following command:
+First download the pre-trained model of the shape completion network:
 ```commandline
 cd downloads
 ./download-weights.sh
 cd ..
 ```
+and then run the following command:
+```commandline
+python run.py --n_episodes 10 --seed 1
+```
+If you want to run the demo with different params, edit the yaml/params.yml file.
 
+<!--
+## Shape Completion Network
+<p align="center">
+  <img src="images/vae.png" width="700" />
+</p>
+
+If you want to train the Shape completion network from scratch, follow the next steps.
 ### Data generation 
 To collect data for training the Shape Completion network, first generate the partial point clouds for each model:
 ```commandline
@@ -50,14 +60,7 @@ python train_shape_net.py --dataset_dir path_to_dataset --epochs 100 --batch_siz
 ```commandline
 python eval_shape_net.py --snapshot_file path-to-model --test_data_dir path-to-test-data
 ```
-
-
-## Quick Demo
-To download the pre-trained models of the shape completion network, run the following commands:
-```commandline
-python run.py
-```
-Note hat in order to run the demo, you have to donwload the pretrained shape compeltion model as described above.
+ -->
 
 ## Citing
 If you find this code useful in your work, please consider citing:
