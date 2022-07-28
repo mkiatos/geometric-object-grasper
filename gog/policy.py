@@ -1,4 +1,3 @@
-import numpy as np
 import open3d as o3d
 import numpy as np
 import torch
@@ -7,7 +6,6 @@ from gog import cameras
 from gog.utils.utils import get_pointcloud
 from gog.utils import pybullet_utils
 from gog.utils.o3d_tools import VoxelGrid, get_reconstructed_surface
-
 from gog.grasp_sampler import GraspSampler
 from gog.shape_completion import ShapeCompletionNetwork
 from gog.grasp_optimizer import SplitPSO
@@ -30,6 +28,7 @@ class GraspingPolicy:
 
     def seed(self, seed):
         self.grasp_sampler.seed(seed)
+        self.optimizer.seed(seed)
 
     def state_representation(self, obs, plot=True):
         intrinsics = np.array(self.config['intrinsics']).reshape(3, 3)
@@ -103,10 +102,7 @@ class GraspingPolicy:
 
         return rec_point_cloud
 
-    def optimize(self, init_preshape, point_cloud):
-        opt_preshape = self.optimizer.optimize(init_preshape, point_cloud)
+    def optimize(self, init_preshape, point_cloud, plot=False):
+        opt_preshape = self.optimizer.optimize(init_preshape, point_cloud, plot)
         return opt_preshape
-
-    def predict(self, point_cloud):
-        grasp_candidates = self.grasp_sampler.sample(point_cloud, plot=True)
 
