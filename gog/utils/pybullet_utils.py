@@ -12,6 +12,60 @@ import os
 from gog.utils.orientation import Quaternion
 
 
+class BulletFrame:
+
+    __name_id_map = {}
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def plot(pos: np.array, quat: Quaternion, name: str, length=0.1, linewidth=3.):
+        """
+        Visualizes a frame.
+
+        Parameters
+        ----------
+        pos -- list of 3 floats, the position of the frame's origin
+        quat -- Quaternion, the frame's orientation
+        name -- string, the frame's name to be displayed
+        length -- float, the length of each axis
+        linewidth -- float, the linewidth of each axis
+
+        Returns
+        -------
+        a list of ints, the ids of the frame's axes
+
+        """
+
+        assert isinstance(quat, Quaternion), "quat must be a Quaternion"
+
+        rotm = quat.rotation_matrix()
+        x_id = p.addUserDebugLine(pos, pos + length * rotm[:, 0], lineColorRGB=[1, 0, 0], lineWidth=linewidth)
+        y_id = p.addUserDebugLine(pos, pos + length * rotm[:, 1], lineColorRGB=[0, 1, 0], lineWidth=linewidth)
+        z_id = p.addUserDebugLine(pos, pos + length * rotm[:, 2], lineColorRGB=[0, 0, 1], lineWidth=linewidth)
+        text_id = p.addUserDebugText(text=name, textPosition=pos)
+
+        BulletFrame.__name_id_map[name] = [x_id, y_id, z_id, text_id]
+
+    @staticmethod
+    def remove(name: str):
+        """
+        Removes a frame from visualization.
+
+        Parameters
+        ----------
+        name -- str, the name of the frame
+
+        """
+
+        frame_id = BulletFrame.__name_id_map.pop(name, None)
+        if not frame_id: return
+
+        for id in frame_id:
+            p.removeUserDebugItem(id)
+
+
 def get_joint_indices(names, body_unique_id=0):
     indices = []
     for name in names:
