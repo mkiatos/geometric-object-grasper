@@ -8,7 +8,7 @@ from gog.utils.orientation import Quaternion, angle_axis2rot
 
 def to_matrix(vec):
     pose = np.eye(4)
-    pose[0:3, 0:3] = Quaternion().from_euler_angles(roll=vec[3], pitch=vec[4], yaw=vec[5]).rotation_matrix()
+    pose[0:3, 0:3] = Quaternion().from_roll_pitch_yaw(vec[3:]).rotation_matrix()
     pose[0:3, 3] = vec[0:3]
     return pose
 
@@ -148,7 +148,7 @@ class SplitPSO(Optimizer):
 
         for i in range(1, self.params['particles']):
             for j in range(nr_joints):
-                joints_particles[i, j] = init_joints[j] + random.uniform(joints_range[j, 0], joints_range[j, 1])
+                joints_particles[i, j] = init_joints[j] + self.rng.uniform(joints_range[j, 0], joints_range[j, 1])
 
         return joints_particles
 
@@ -156,11 +156,11 @@ class SplitPSO(Optimizer):
 
         pose_particles = np.zeros((self.params['particles'] + 1, 6))
         pose_particles[0, 0:3] = init_pose[0:3, 3]
-        pose_particles[0, 3:] = Quaternion().from_rotation_matrix(init_pose[0:3, 0:3]).euler_angles()
+        pose_particles[0, 3:] = Quaternion().from_rotation_matrix(init_pose[0:3, 0:3]).roll_pitch_yaw()
 
         for i in range(1, self.params['particles']):
             # Randomize position
-            t = init_pose[0:3, 3] + np.random.uniform(low=t_range[0], high=t_range[1], size=(3,))
+            t = init_pose[0:3, 3] + self.rng.uniform(low=t_range[0], high=t_range[1], size=(3,))
 
             # Randomize orientation
             random_axis = np.random.rand(3, )
@@ -169,7 +169,7 @@ class SplitPSO(Optimizer):
             random_rot = np.matmul(random_rot, init_pose[0:3, 0:3])
 
             pose_particles[i, 0:3] = t
-            pose_particles[i, 3:] = Quaternion().from_rotation_matrix(random_rot).euler_angles()
+            pose_particles[i, 3:] = Quaternion().from_rotation_matrix(random_rot).roll_pitch_yaw()
 
         return pose_particles
 
@@ -178,7 +178,7 @@ class SplitPSO(Optimizer):
         pose_swarm = Swarm(self.generate_random_poses(init_preshape['pose']))
 
         # ToDo: hardcoded limits
-        joints_swarm = Swarm(self.generate_random_angles(init_preshape['joint_values']),
+        joints_swarm = Swarm(self.generate_random_angles(init_preshape['finger_joints']),
                              limits=np.array([[0, 30 * np.pi / 180], [0, 140 * np.pi / 180],
                                               [0, 140 * np.pi / 180], [0, 140 * np.pi / 180]]))
 
@@ -186,19 +186,19 @@ class SplitPSO(Optimizer):
 
     def plot_grasp(self, point_cloud, preshape):
         self.robot.update_links(joint_values=preshape['joints'],
-                                palm_pose=preshape['palm_pose'])
+                                palm_pose=preshape['pose'])
 
         hand_contacts = self.robot.get_contacts()
         object_pts = {'points': np.asarray(point_cloud.points),
                       'normals': np.asarray(point_cloud.normals)}
         collision_pts = self.robot.get_collision_pts(point_cloud)
-        print('E_shape:{}, E_col:{}, E:{}'.format(self.quality_metric.compute_shape_complementarity(hand_contacts,
-                                                                                                    object_pts),
-                                                  self.quality_metric.compute_collision_penalty(hand_contacts,
-                                                                                                collision_pts),
-                                                  self.quality_metric(hand=self.robot.get_contacts(),
-                                                                      target=object_pts,
-                                                                      collisions=collision_pts)))
+        # print('E_shape:{}, E_col:{}, E:{}'.format(self.quality_metric.compute_shape_complementarity(hand_contacts,
+        #                                                                                             object_pts),
+        #                                           self.quality_metric.compute_collision_penalty(hand_contacts,
+        #                                                                                         collision_pts),
+        #                                           self.quality_metric(hand=self.robot.get_contacts(),
+        #                                                               target=object_pts,
+        #                                                               collisions=collision_pts)))
         # print('-----------')
 
         visuals = self.robot.get_visual_map(meshes=True, boxes=True)
@@ -209,8 +209,8 @@ class SplitPSO(Optimizer):
 
     def optimize(self, init_preshape, point_cloud, plot=False):
         if plot:
-            self.plot_grasp(point_cloud, preshape={'joints': init_preshape['joint_values'],
-                                                   'palm_pose': init_preshape['pose']})
+            self.plot_grasp(point_cloud, preshape={'joints': init_preshape['finger_joints'],
+                                                   'pose': init_preshape['pose']})
 
         # Generate swarms
         pose_swarm, joints_swarm = self.create_swarm(init_preshape)
@@ -255,9 +255,11 @@ class SplitPSO(Optimizer):
             # Update velocity and position
             joints_swarm.update(w=self.params['w'], c1=self.params['c1'], c2=self.params['c2'])
 
-            print('{}. e: {}'.format(i, joints_swarm.global_best_score))
+            # print('{}. e: {}'.format(i, joints_swarm.global_best_score))
+            # print('\r' + str(joints_swarm.global_best_score), end='', flush=True)
+
             # self.plot_grasp(point_cloud, preshape={'joints': joints_swarm.global_best_pos,
-            #                                        'palm_pose': to_matrix(pose_swarm.global_best_pos)})
+            #                                        'pose': to_matrix(pose_swarm.global_best_pos)})
 
         opt_pose = to_matrix(pose_swarm.global_best_pos)
         finger_joints = joints_swarm.global_best_pos
@@ -271,9 +273,9 @@ class SplitPSO(Optimizer):
 
         if plot:
             self.plot_grasp(point_cloud, preshape={'joints': joints_swarm.global_best_pos,
-                                                   'palm_pose': to_matrix(pose_swarm.global_best_pos)})
+                                                   'pose': to_matrix(pose_swarm.global_best_pos)})
 
-        return {'joints': joints_swarm.global_best_pos,
+        return {'finger_joints': joints_swarm.global_best_pos,
                 'pose': to_matrix(pose_swarm.global_best_pos),
                 'score': joints_swarm.global_best_score}
 
