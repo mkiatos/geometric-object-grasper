@@ -573,13 +573,17 @@ class Environment:
     def __init__(self,
                  assets_root,
                  disp=True,
-                 hz=240):
+                 hz=240,
+                 params=[]):
 
         self.pxl_size = 0.005
         self.bounds = np.array([[-0.25, 0.25], [-0.25, 0.25], [0.01, 0.3]])  # workspace limits
         self.assets_root = assets_root
 
-        self.nr_objects = [3, 4]
+        if params:
+            self.nr_objects = params['scene_generation']['nr_of_objects']
+        else:
+            self.nr_objects = [1, 2]
         self.disp = disp
 
         # Setup cameras.
@@ -656,7 +660,7 @@ class Environment:
             size = (np.array(p.getAABB(body_id)[1]) - np.array(p.getAABB(body_id)[0])) / 2.0
 
             max_size = np.sqrt(size[0] ** 2 + size[1] ** 2)
-            erode_size = int(np.round(get_pxl_distance(meters=max_size)))
+            erode_size = int(np.round(get_pxl_distance(meters=max_size))) + 10
 
             obs = self.get_obs()
             state = utils.get_fused_heightmap(obs, cameras.RealSense.CONFIG, self.bounds, self.pxl_size)
@@ -665,11 +669,6 @@ class Environment:
             free[state == 0] = 1
             free[0, :], free[:, 0], free[-1, :], free[:, -1] = 0, 0, 0, 0
 
-            # Do not place object next to table limits
-            free[0:20] = 0
-            free[80:100] = 0
-            free[:, 0:20] = 0
-            free[:, 80:100] = 0
             free = cv2.erode(free, np.ones((erode_size, erode_size), np.uint8))
 
             if np.sum(free) == 0:
@@ -715,7 +714,7 @@ class Environment:
         self.add_objects()
 
         t = 0
-        while t < 1:
+        while t < 5:
             self.robot.still()
             t += self.dt
             p.stepSimulation()
@@ -729,8 +728,8 @@ class Environment:
 
     def step(self, action):
 
-        from gog.utils.pybullet_utils import draw_pose
-        draw_pose(action[0]['pos'], action[0]['quat'])
+        # from gog.utils.pybullet_utils import draw_pose
+        # draw_pose(action[0]['pos'], action[0]['quat'])
 
         # # 1. Move the robot 10cm up the pre-grasp pose
         # approach_dir = action[0]['quat'].rotation_matrix()[:, 2]
@@ -745,18 +744,16 @@ class Environment:
         # 3. Move robot to pre-grasp position
         # self.robot.move(action[0]['pos'], action[0]['quat'], duration=5)
 
-        draw_pose(action[1]['pos'], action[1]['quat'])
+        # draw_pose(action[1]['pos'], action[1]['quat'])
         self.robot.move(action[1]['pos'], action[1]['quat'], duration=5)
-        self.robot.move_fingers(action[1]['finger_joints'], duration=2)
+        self.robot.move_fingers(action[1]['finger_joints'], duration=5)
 
         final_finger_joints = action[1]['finger_joints']
         final_finger_joints[1:] += 0.2
-        self.robot.move_fingers(final_finger_joints, duration=2)
+        self.robot.move_fingers(final_finger_joints, duration=5)
 
         final_pos = action[1]['pos']
         final_pos[2] += 0.2
-        self.robot.move(final_pos, action[1]['quat'], duration=5)
-
         self.robot.move(final_pos, action[1]['quat'], duration=5)
 
         # Move home and drop object to the bin
