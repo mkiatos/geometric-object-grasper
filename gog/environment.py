@@ -692,7 +692,7 @@ class Environment:
         # Temporarily disable rendering to load scene faster.
         # p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 
-        self.robot = FloatingBarret(urdf_path='../assets/barrett_gripper/floating_gripper.urdf',
+        self.robot = FloatingBarret(urdf_path='../assets/mounted_barrett_gripper/floating_gripper.urdf',
                                     ee_link_name='mount_link', prefix='gripper')
         p0 = np.array([0.7, 0.0, 0.5])
         Q0 = Quaternion.from_rotation_matrix(rot_y(-np.pi))
@@ -703,7 +703,7 @@ class Environment:
         table_id = pybullet_utils.load_urdf(p, UR5_WORKSPACE_URDF_PATH)
         p.changeDynamics(table_id, -1, lateralFriction=0.1)
 
-        pybullet_utils.load_urdf(p, '../assets/container.urdf', [0.7, 0, 0.1],
+        pybullet_utils.load_urdf(p, '../assets/container/container.urdf', [0.7, 0, 0.1],
                                  Quaternion.from_rotation_matrix(rot_z(np.pi / 2)).as_vector('xyzw'))
 
         # Re-enable rendering.
