@@ -127,7 +127,7 @@ def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--n_episodes', default='2', type=int, help='')
     parser.add_argument('--plot', action='store_true', default=False, help='')
-    parser.add_argument('--seed', default=0, type=int, help='')
+    parser.add_argument('--seed', default=2, type=int, help='')
     return parser.parse_args()
 
 
