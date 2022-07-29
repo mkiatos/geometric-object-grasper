@@ -51,7 +51,7 @@ __pycache__
 /logs
 /models
 
-*.obj
+#*.obj
 
 /venv
 clt_core/
