@@ -35,7 +35,7 @@ grasp_sampling:
     gripper_width: 0.07
 
 vae:
-  model_weights: '../logs/vae/model.pt'
+  model_weights: '../downloads/vae/model.pt'
 
 power_grasping:
   optimizer:
