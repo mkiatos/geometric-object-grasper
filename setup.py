@@ -9,5 +9,6 @@ setup(name='gog',
                         'kinpy',\
                         'open3d',\
                         'numpy',\
-                        'matplotlib']
+                        'matplotlib',\
+                        'gdown']
 )
