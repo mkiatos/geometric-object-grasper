@@ -28,6 +28,7 @@ cd ..
 ```
 and then run the following command:
 ```commandline
+cd scripts/
 python run.py --n_episodes 10 --seed 1
 ```
 If you want to run the demo with different parameters, edit the yaml/params.yml file.
