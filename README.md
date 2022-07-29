@@ -77,3 +77,8 @@ If you find this code useful in your work, please consider citing:
   publisher={IEEE}
 }
 ```
+
+## Acknowledgements
+The floating Barrett code was developed by [Slifer64][1]
+
+[1]: https://github.com/Slifer64
